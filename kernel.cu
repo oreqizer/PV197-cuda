@@ -1,21 +1,45 @@
 #include <stdio.h>
 
-#define BLOCK_SIZE = 512
+#define N 32
+#define BLOCK_SIZE (N * N)
 
 __global__ void solver(
     const int *results,
     float *avg_stud,
     float *avg_que,
-    const int dim_x,
-    const int dim_y
+    const int s,
+    const int q
 ) {
+    __shared__ float tmp_stud[BLOCK_SIZE];
+    __shared__ float tmp_que[BLOCK_SIZE];
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int resultIds = y*dim_x + x;
+    int idx = y*q + x;
 
-    // add to resulting arrays
-    avg_que[x] += results[resultIds];
-    avg_stud[y] += results[resultIds];
+    // write to shared memory
+    tmp_que[threadIdx.x] = results[idx];
+    tmp_stud[threadIdx.y] = results[idx];
+    __syncthreads();
+
+    // reduce
+    for (int i = 0; i < blockDim.x; i *= 2) {
+        int index = 2 * i * threadIdx.x;
+        if (index < blockDim.x) {
+            tmp_que[index] += tmp_que[index + i];
+        }
+        __syncthreads();
+    }
+    for (int i = 0; i < blockDim.y; i *= 2) {
+        int index = 2 * i * threadIdx.y;
+        if (index < blockDim.y) {
+            tmp_stud[index] += tmp_stud[index + i];
+        }
+        __syncthreads();
+    }
+
+    // write
+    if (y == 0) avg_que[x] = tmp_que[0];
+    if (x == 0) avg_stud[y] = tmp_stud[0];
 }
 
 void solveGPU(
@@ -26,8 +50,8 @@ void solveGPU(
     const int questions  // x: always divisible by 32
 ) {
     int n = students * questions;
-    solver<<<n, n / BLOCK_SIZE>>>(
-        results, avg_stud, avg_que, questions, students
+    solver<<<n/BLOCK_SIZE, BLOCK_SIZE>>>(
+        results, avg_stud, avg_que, students, questions
     );
 
     if (cudaPeekAtLastError() != cudaSuccess) {
