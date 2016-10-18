@@ -3,9 +3,6 @@
 #define N 32  // also the warpSize
 #define BLOCK_SIZE (N * N)
 
-__shared__ float sh_tmp[BLOCK_SIZE];      // temporary storage
-__shared__ float sh_res[BLOCK_SIZE + 1];  // max: 1024x1 + 1x1
-
 __inline__ __device__
 int warpSum(int val) {
     // warpSize is 32
