@@ -36,8 +36,8 @@ void solver(
     atomicAdd(avg_stud + res_x, val);
     __syncthreads();
 
-    if (res_x == 0) avg_que[res_y] *= 1.0/X;
-    if (res_y == 0) avg_stud[res_x] *= 1.0/Y;
+    if (res_x == 0) avg_que[res_y] /= X;
+    if (res_y == 0) avg_stud[res_x] /= Y;
 }
 
 void solveGPU(
