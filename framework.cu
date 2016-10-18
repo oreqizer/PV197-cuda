@@ -1,14 +1,17 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <cuda_runtime.h>
-#include <algorithm> 
+#include <algorithm>
 
 #include "kernel.cu"
 #include "kernel_CPU.C"
 
-#define STUDENTS  2048
-#define QUESTIONS 1024
-#define ITERS 1000
+// #define STUDENTS  2048
+// #define QUESTIONS 1024
+// #define ITERS 1000
+#define STUDENTS  64
+#define QUESTIONS 32
+#define ITERS 1
 
 void generateRandomResults(int *results, int students, int questions) {
     int hardness[questions];
@@ -39,7 +42,7 @@ int main(int argc, char **argv){
 
     // parse command line
     int device = 0;
-    if (argc == 2) 
+    if (argc == 2)
         device = atoi(argv[1]);
     if (cudaSetDevice(device) != cudaSuccess){
         fprintf(stderr, "Cannot set CUDA device!\n");
@@ -61,9 +64,9 @@ int main(int argc, char **argv){
     generateRandomResults(results, STUDENTS, QUESTIONS);
     gpu_avg_stud = (float*)malloc(STUDENTS*sizeof(gpu_avg_stud[0]));
     gpu_avg_que = (float*)malloc(QUESTIONS*sizeof(gpu_avg_stud[0]));
- 
+
     // allocate and set device memory
-    if (cudaMalloc((void**)&d_results, STUDENTS*QUESTIONS*sizeof(d_results[0])) != cudaSuccess 
+    if (cudaMalloc((void**)&d_results, STUDENTS*QUESTIONS*sizeof(d_results[0])) != cudaSuccess
     || cudaMalloc((void**)&d_avg_stud, STUDENTS*sizeof(d_avg_stud[0])) != cudaSuccess
     || cudaMalloc((void**)&d_avg_que, QUESTIONS*sizeof(d_avg_que[0])) != cudaSuccess) {
         fprintf(stderr, "Device memory allocation error!\n");
@@ -136,4 +139,3 @@ cleanup:
 
     return 0;
 }
-
