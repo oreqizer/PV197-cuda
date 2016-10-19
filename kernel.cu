@@ -15,20 +15,25 @@ int warpSum(int val) {
 }
 
 __global__
-void solver(
-    const int *results,
-    float *avg_stud,
-    float *avg_que,
-    const int X,  // questions
-    const int Y   // students
-) {
-    int idx = blockIdx.x*blockDim.x + threadIdx.x;
-    int x = idx % X;
-    int y = idx / X;
-    int val = results[idx];
+void reduceRows(const int *in, float *out, int X, int Y) {
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-    atomicAdd(avg_stud + y, val);
-    atomicAdd(avg_que + x, val);
+    int sum = 0;
+    for (int y = 0; y < Y; y++) {
+        sum += in[y*X + x];
+    }
+    out[x] = sum;
+}
+
+__global__
+void reduceCols(const int *in, float *out, int X, int Y) {
+    int y = blockIdx.x*blockDim.x + threadIdx.x;
+
+    int sum = 0;
+    for (int x = 0; x < X; x++) {
+        sum += in[y*X + x];
+    }
+    out[y] = sum;
 }
 
 __global__
@@ -45,24 +50,22 @@ void divide(float *arr, float count) {
 
 void solveGPU(
     const int *results,  // questions * students
-    float *avg_stud,     // score per student: total / questions
-    float *avg_que,      // score per question: total / students
-    const int students,  // y: always divisible by 32
-    const int questions  // x: always divisible by 32
+    float *avg_stud,     // score per student: total / questions -> len Y
+    float *avg_que,      // score per question: total / students -> len X
+    const int students,  // Y: always divisible by 32
+    const int questions  // X: always divisible by 32
 ) {
-    int n = questions * students;
-
-    dim3 grid(n/BLOCK_SIZE);
-    dim3 block(BLOCK_SIZE);
-
     // reset arrays
     nullify<<<students/N, N>>>(avg_stud);
     nullify<<<questions/N, N>>>(avg_que);
 
+    dim3 gridS(students/N);
+    dim3 gridQ(questions/N);
+    dim3 block(N);
+
     // load all results
-    solver<<<grid, block>>>(
-        results, avg_stud, avg_que, questions, students
-    );
+    reduceCols<<<gridS, block>>>(results, avg_stud, questions, students);
+    reduceRows<<<gridQ, block>>>(results, avg_que, questions, students);
 
     // divide results
     divide<<<students/N, N>>>(avg_stud, questions);
