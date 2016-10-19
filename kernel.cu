@@ -19,34 +19,36 @@ void solver(
     const int *results,
     float *avg_stud,
     float *avg_que,
-    const int X,  // students
-    const int Y   // questions
+    const int X,  // questions
+    const int Y   // students
 ) {
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
-    int idx = y * X + x;
-    int res_x = idx % X;
-    int res_y = idx / X;
+    int idx = y*X + x;
     int val = results[idx];
 
-    atomicAdd(avg_que + res_y, val);
-    atomicAdd(avg_stud + res_x, val);
+    atomicAdd(avg_stud + y, val);
+    atomicAdd(avg_que + x, val);
     __syncthreads();
 
-    if (res_x == 0) avg_que[res_y] /= X;
-    if (res_y == 0) avg_stud[res_x] /= Y;
+    if (x == 0) avg_stud[y] /= X;
+    if (y == 0) avg_que[x] /= Y;
 }
 
 void solveGPU(
-    const int *results,  // students * questions
+    const int *results,  // questions * students
     float *avg_stud,     // score per student: total / questions
     float *avg_que,      // score per question: total / students
-    const int students,  // x: always divisible by 32
-    const int questions  // y: always divisible by 32
+    const int students,  // y: always divisible by 32
+    const int questions  // x: always divisible by 32
 ) {
-    int n = students * questions;
-    solver<<<n/BLOCK_SIZE, BLOCK_SIZE>>>(
-        results, avg_stud, avg_que, students, questions
+    int n = questions * students;
+
+    dim3 grid(n/BLOCK_SIZE);
+    dim3 block(N, N);
+
+    solver<<<grid, block>>>(
+        results, avg_stud, avg_que, questions, students
     );
 
     if (cudaPeekAtLastError() != cudaSuccess) {

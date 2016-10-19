@@ -9,7 +9,7 @@
 // #define STUDENTS  2048
 // #define QUESTIONS 1024
 // #define ITERS 1000
-#define STUDENTS  64
+#define STUDENTS  32
 #define QUESTIONS 32
 #define ITERS 1
 
