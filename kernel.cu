@@ -5,35 +5,43 @@
 
 __inline__ __device__
 int warpSum(int val) {
-    // warpSize is 32
-    val += __shfl_down(val, 16);
-    val += __shfl_down(val, 8);
-    val += __shfl_down(val, 4);
-    val += __shfl_down(val, 2);
-    val += __shfl_down(val, 1);
+    for (int offset = warpSize/2; offset > 0; offset /= 2) {
+        val += __shfl_down(val, offset);
+    }
     return val;
+}
+
+__inline__ __device__
+void blockSum(int *shared, int val) {
+    int x = threadIdx.x % warpSize;
+    int y = threadIdx.x / warpSize;
+
+    val = warpSum(val);             // reduce warp
+    if (x == 0) shared[y] = val;    // write result to shared memory
 }
 
 __global__
 void reduceRows(const int *in, float *out, int X, int Y) {
-    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    __shared__ int shared[N];
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    int sum = in[i];
+    // for (int i = x; i < X; i += blockDim.x * gridDim.x) {
+    //     sum += in[i];
+    // } TODO: grid stride
 
-    int sum = 0;
-    for (int y = 0; y < Y; y++) {
-        sum += in[y*X + x];
-    }
-    out[x] = sum;
+    blockSum(shared, sum); // TODO
 }
 
 __global__
 void reduceCols(const int *in, float *out, int X, int Y) {
     int y = blockIdx.x*blockDim.x + threadIdx.x;
-
-    int sum = 0;
-    for (int x = 0; x < X; x++) {
-        sum += in[y*X + x];
+    for (; y < Y; y += blockDim.x * gridDim.x) {
+        int sum = 0;
+        for (int x = 0; x < X; x++) {
+            sum += in[y*X + x];
+        }
+        out[y] = sum;
     }
-    out[y] = sum;
 }
 
 __global__
@@ -65,7 +73,7 @@ void solveGPU(
 
     // load all results
     reduceCols<<<gridS, block>>>(results, avg_stud, questions, students);
-    reduceRows<<<gridQ, block>>>(results, avg_que, questions, students);
+    reduceRows<<<gridQ, 1024>>>(results, avg_que, questions, students);
 
     // divide results
     divide<<<students/N, N>>>(avg_stud, questions);
