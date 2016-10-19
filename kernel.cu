@@ -29,10 +29,18 @@ void solver(
 
     atomicAdd(avg_stud + y, val);
     atomicAdd(avg_que + x, val);
-    __syncthreads();
+}
 
-    // if (x == 0) avg_stud[y] /= X;
-    // if (y == 0) avg_que[x] /= Y;
+__global__
+void nullify(float *arr) {
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    arr[i] = 0;
+}
+
+__global__
+void divide(float *arr, float count) {
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    arr[i] /= count;
 }
 
 void solveGPU(
@@ -47,9 +55,18 @@ void solveGPU(
     dim3 grid(n/BLOCK_SIZE);
     dim3 block(BLOCK_SIZE);
 
+    // reset arrays
+    nullify<<<students/N, N>>>(avg_stud);
+    nullify<<<questions/N, N>>>(avg_que);
+
+    // load all results
     solver<<<grid, block>>>(
         results, avg_stud, avg_que, questions, students
     );
+
+    // divide results
+    divide<<<students/N, N>>>(avg_stud, questions);
+    divide<<<questions/N, N>>>(avg_que, students);
 
     if (cudaPeekAtLastError() != cudaSuccess) {
         printf("Error: %s\n", cudaGetErrorString(cudaGetLastError()));
