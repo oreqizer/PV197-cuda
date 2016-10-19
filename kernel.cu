@@ -22,17 +22,17 @@ void solver(
     const int X,  // questions
     const int Y   // students
 ) {
-    int x = blockIdx.x*blockDim.x + threadIdx.x;
-    int y = blockIdx.y*blockDim.y + threadIdx.y;
-    int idx = y*X + x;
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int x = idx % X;
+    int y = idx / X;
     int val = results[idx];
 
     atomicAdd(avg_stud + y, val);
     atomicAdd(avg_que + x, val);
     __syncthreads();
 
-    if (x == 0) avg_stud[y] /= X;
-    if (y == 0) avg_que[x] /= Y;
+    // if (x == 0) avg_stud[y] /= X;
+    // if (y == 0) avg_que[x] /= Y;
 }
 
 void solveGPU(
@@ -45,7 +45,7 @@ void solveGPU(
     int n = questions * students;
 
     dim3 grid(n/BLOCK_SIZE);
-    dim3 block(N, N);
+    dim3 block(BLOCK_SIZE);
 
     solver<<<grid, block>>>(
         results, avg_stud, avg_que, questions, students
