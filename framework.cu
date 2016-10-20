@@ -6,7 +6,7 @@
 #include "kernel.cu"
 #include "kernel_CPU.C"
 
-#define STUDENTS  64
+#define STUDENTS  32
 #define QUESTIONS 32
 #define ITERS 1
 // #define STUDENTS  2048

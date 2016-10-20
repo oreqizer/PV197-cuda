@@ -12,35 +12,44 @@ int warpSum(int val) {
 }
 
 __inline__ __device__
-void blockSum(int *shared, int val) {
+int blockSum(int val) {
+    static __shared__ int shared[N]; // shared mem for 32 partial sums
     int x = threadIdx.x % warpSize;
     int y = threadIdx.x / warpSize;
 
-    val = warpSum(val);             // reduce warp
-    if (x == 0) shared[y] = val;    // write result to shared memory
+    val = warpSum(val);              // reduce warp
+    if (x == 0) shared[y] = val;     // write result to shared memory
+    __syncthreads();
+
+    val = shared[x];
+    if (y == 0) val = warpSum(val);  // reduce within 1st warp
+
+    return val;
 }
 
 __global__
 void reduceRows(const int *in, float *out, int X, int Y) {
-    __shared__ int shared[N];
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
-    int sum = in[i];
-    // for (int i = x; i < X; i += blockDim.x * gridDim.x) {
-    //     sum += in[i];
-    // } TODO: grid stride
-
-    blockSum(shared, sum); // TODO
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int sum = 0;
+    for (int i = x; i < X*Y; i += blockDim.x * gridDim.x) {
+        sum += in[i];
+    }
+    sum = blockSum(sum);
+    if (threadIdx.x == 0) {
+        atomicAdd(out + blockIdx.x, sum);
+    }
 }
 
 __global__
 void reduceCols(const int *in, float *out, int X, int Y) {
     int y = blockIdx.x*blockDim.x + threadIdx.x;
-    for (; y < Y; y += blockDim.x * gridDim.x) {
-        int sum = 0;
-        for (int x = 0; x < X; x++) {
-            sum += in[y*X + x];
-        }
-        out[y] = sum;
+    int sum = 0;
+    // for (int i = y; i < X*Y; i += blockDim.x * gridDim.x) {
+    //     sum += in[i];
+    // }
+    sum = blockSum(sum);
+    if (threadIdx.x == 0) {
+        atomicAdd(out + blockIdx.x, sum);
     }
 }
 
@@ -60,24 +69,26 @@ void solveGPU(
     const int *results,  // questions * students
     float *avg_stud,     // score per student: total / questions -> len Y
     float *avg_que,      // score per question: total / students -> len X
-    const int students,  // Y: always divisible by 32
-    const int questions  // X: always divisible by 32
+    const int Y,         // students: always divisible by 32
+    const int X          // questions: always divisible by 32
 ) {
-    // reset arrays
-    nullify<<<students/N, N>>>(avg_stud);
-    nullify<<<questions/N, N>>>(avg_que);
+    int n = X * Y;
 
-    dim3 gridS(students/N);
-    dim3 gridQ(questions/N);
-    dim3 block(N);
+    // reset arrays
+    nullify<<<Y/N, N>>>(avg_stud);
+    nullify<<<X/N, N>>>(avg_que);
+
+    dim3 gridS(Y/N);
+    dim3 gridQ(X/N);
+    dim3 threads(N);
 
     // load all results
-    reduceCols<<<gridS, block>>>(results, avg_stud, questions, students);
-    reduceRows<<<gridQ, 1024>>>(results, avg_que, questions, students);
+    reduceCols<<<Y, X>>>(results, avg_que, X, Y);
+    reduceRows<<<X, Y>>>(results, avg_stud, X, Y);
 
     // divide results
-    divide<<<students/N, N>>>(avg_stud, questions);
-    divide<<<questions/N, N>>>(avg_que, students);
+    divide<<<Y/N, N>>>(avg_stud, X);
+    divide<<<X/N, N>>>(avg_que, Y);
 
     if (cudaPeekAtLastError() != cudaSuccess) {
         printf("Error: %s\n", cudaGetErrorString(cudaGetLastError()));
