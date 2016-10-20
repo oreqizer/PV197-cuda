@@ -43,22 +43,16 @@ void reduceRows(const int *in, float *out, int X, int Y) {
 __global__
 void reduceCols(const int *in, float *out, int X, int Y) {
     int y = blockIdx.x*blockDim.x + threadIdx.x;
-    int row = y % X;
-    int col = y / X;
+    int col = y % X;
+    int row = y / X;
     int sum = in[col*X + row];
     // for (int i = y; i < X*Y; i += blockDim.x * gridDim.x) {
     //     sum += in[i*X + col];
     // }
     sum = blockSum(sum);
     if (threadIdx.x == 0) {
-        atomicAdd(out + col, sum);
+        atomicAdd(out + row, sum);
     }
-}
-
-__global__
-void nullify(float *arr) {
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
-    arr[i] = 0;
 }
 
 __global__
@@ -77,15 +71,15 @@ void solveGPU(
     int n = X * Y;
 
     // reset arrays
-    nullify<<<Y/N, N>>>(avg_stud);
-    nullify<<<X/N, N>>>(avg_que);
+    cudaMemset(avg_stud, 0, Y*sizeof(avg_stud[0]));
+    cudaMemset(avg_que, 0, X*sizeof(avg_que[0]));
 
     dim3 threads(BLOCK_SIZE);
     dim3 blocks(n/BLOCK_SIZE);
 
     // load all results
-    reduceCols<<<blocks, threads>>>(results, avg_que, X, Y);
     reduceRows<<<blocks, threads>>>(results, avg_stud, X, Y);
+    // reduceCols<<<blocks, threads>>>(results, avg_que, X, Y);
 
     // divide results
     divide<<<Y/N, N>>>(avg_stud, X);
