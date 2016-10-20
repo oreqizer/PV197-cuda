@@ -19,7 +19,7 @@ void reduceRows(const int *in, float *out, int X, int Y) {
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int sum = in[x];
     sum = warpSum(sum);
-    if ((threadIdx.x & (warpSize - 1)) == 0) {
+    if ((threadIdx.x & warpSize - 1) == 0) {
         atomicAdd(out + x / X, sum);
     }
 }
