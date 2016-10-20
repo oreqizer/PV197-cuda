@@ -5,52 +5,33 @@
 
 __inline__ __device__
 int warpSum(int val) {
-    for (int offset = warpSize/2; offset > 0; offset /= 2) {
-        val += __shfl_down(val, offset);
-    }
-    return val;
-}
-
-__inline__ __device__
-int blockSum(int val) {
-    static __shared__ int shared[N]; // shared mem for 32 partial sums
-    int x = threadIdx.x % warpSize;
-    int y = threadIdx.x / warpSize;
-
-    val = warpSum(val);              // reduce warp
-    if (x == 0) shared[y] = val;     // write result to shared memory
-    __syncthreads();
-
-    val = shared[x];
-    if (y == 0) val = warpSum(val);  // reduce within 1st warp
-
+    // warpSize always 32
+    val += __shfl_down(val, 16);
+    val += __shfl_down(val, 8);
+    val += __shfl_down(val, 4);
+    val += __shfl_down(val, 2);
+    val += __shfl_down(val, 1);
     return val;
 }
 
 __global__
 void reduceRows(const int *in, float *out, int X, int Y) {
     int x = blockIdx.x*blockDim.x + threadIdx.x;
-    int sum = 0;
-    for (int i = x; i < X*Y; i += blockDim.x * gridDim.x) {
-        sum += in[i];
-    }
-    sum = blockSum(sum);
-    if (threadIdx.x == 0) {
+    int sum = in[x];
+    sum = warpSum(sum);
+    if ((threadIdx.x & (warpSize - 1)) == 0) {
         atomicAdd(out + x / X, sum);
     }
 }
 
-__global__
+__global__  // BOTTLENECK
 void reduceCols(const int *in, float *out, int X, int Y) {
-    int y = blockIdx.x*blockDim.x + threadIdx.x;
-    int col = y % X;
-    int row = y / X;
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int col = x % Y;
+    int row = x / Y;
     int sum = in[col*X + row];
-    // for (int i = y; i < X*Y; i += blockDim.x * gridDim.x) {
-    //     sum += in[i*X + col];
-    // }
-    sum = blockSum(sum);
-    if (threadIdx.x == 0) {
+    sum = warpSum(sum);
+    if (threadIdx.x % warpSize == 0) {
         atomicAdd(out + row, sum);
     }
 }
@@ -74,12 +55,12 @@ void solveGPU(
     cudaMemset(avg_stud, 0, Y*sizeof(avg_stud[0]));
     cudaMemset(avg_que, 0, X*sizeof(avg_que[0]));
 
-    dim3 threads(BLOCK_SIZE);
-    dim3 blocks(n/BLOCK_SIZE);
+    dim3 threads(N);
+    dim3 blocks(n/N);
 
     // load all results
     reduceRows<<<blocks, threads>>>(results, avg_stud, X, Y);
-    // reduceCols<<<blocks, threads>>>(results, avg_que, X, Y);
+    reduceCols<<<blocks, threads>>>(results, avg_que, X, Y);
 
     // divide results
     divide<<<Y/N, N>>>(avg_stud, X);
