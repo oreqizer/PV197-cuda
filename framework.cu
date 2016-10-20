@@ -6,11 +6,11 @@
 #include "kernel.cu"
 #include "kernel_CPU.C"
 
-#define STUDENTS  32
-#define QUESTIONS 32
-#define ITERS 1
 // #define STUDENTS  2048
 // #define QUESTIONS 1024
+#define ITERS 1
+#define STUDENTS  2048  // Y
+#define QUESTIONS 1024  // X
 // #define ITERS 1000
 
 void generateRandomResults(int *results, int students, int questions) {
