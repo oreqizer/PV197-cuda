@@ -16,23 +16,24 @@ int warpSum(int val) {
 
 __global__
 void reduce(const int *in, float *out_stud, float *out_que, int X, int Y) {
-    __shared__ int tile[N][N + 1];  // bank conflict
+    __shared__ int tile[N][N + 1];      // bank conflict
     int x = blockIdx.x*N + threadIdx.x;
     int y = blockIdx.y*N + threadIdx.y;
-    int width = gridDim.x*N;
-    int val = in[y*width + x];
+    int width = gridDim.x*N;            // width of the whole matrix
+    int idx = y*width + x;              // global index
+    int val = in[idx];
 
-    tile[threadIdx.y][threadIdx.x] = val;
+    tile[threadIdx.x][threadIdx.y] = val;
     __syncthreads();
 
     int sum_stud = val;
-    int sum_que = tile[threadIdx.x][threadIdx.y];
+    int sum_que = tile[threadIdx.y][threadIdx.x];
 
     if (threadIdx.y == 0) sum_stud = warpSum(sum_stud);
     if (threadIdx.x == 0) sum_que = warpSum(sum_que);
 
-    if (threadIdx.x == 0) atomicAdd(out_stud + y*width, sum_stud);  // TODO
-    // if (threadIdx.y == 0) atomicAdd(out_que + y / X, sum_que);
+    if (threadIdx.x == 0) atomicAdd(out_stud + idx / X, sum_stud);
+    if (threadIdx.y == 0) atomicAdd(out_que + idx % X, sum_que);
 }
 
 __global__
