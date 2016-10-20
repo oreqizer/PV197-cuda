@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#define N 32  // also the warpSize
+#define N 32  // also the tile size
 #define BLOCK_SIZE (N * N)
 
 __inline__ __device__
@@ -15,25 +15,24 @@ int warpSum(int val) {
 }
 
 __global__
-void reduceRows(const int *in, float *out, int X, int Y) {
-    int x = blockIdx.x*blockDim.x + threadIdx.x;
-    int sum = in[x];
-    sum = warpSum(sum);
-    if ((threadIdx.x & warpSize - 1) == 0) {
-        atomicAdd(out + x / X, sum);
-    }
-}
+void reduce(const int *in, float *out_stud, float *out_que, int X, int Y) {
+    __shared__ int tile[N][N + 1];  // bank conflict
+    int x = blockIdx.x*N + threadIdx.x;
+    int y = blockIdx.y*N + threadIdx.y;
+    int width = gridDim.x*N;
+    int val = in[y*width + x];
 
-__global__  // BOTTLENECK
-void reduceCols(const int *in, float *out, int X, int Y) {
-    int x = blockIdx.x*blockDim.x + threadIdx.x;
-    int col = x % Y;
-    int row = x / Y;
-    int sum = in[col*X + row];
-    sum = warpSum(sum);
-    if (threadIdx.x % warpSize == 0) {
-        atomicAdd(out + row, sum);
-    }
+    tile[threadIdx.y][threadIdx.x] = val;
+    __syncthreads();
+
+    int sum_stud = val;
+    int sum_que = tile[threadIdx.x][threadIdx.y];
+
+    if (threadIdx.y == 0) sum_stud = warpSum(sum_stud);
+    if (threadIdx.x == 0) sum_que = warpSum(sum_que);
+
+    if (threadIdx.x == 0) atomicAdd(out_stud + y*width, sum_stud);  // TODO
+    // if (threadIdx.y == 0) atomicAdd(out_que + y / X, sum_que);
 }
 
 __global__
@@ -55,12 +54,11 @@ void solveGPU(
     cudaMemset(avg_stud, 0, Y*sizeof(avg_stud[0]));
     cudaMemset(avg_que, 0, X*sizeof(avg_que[0]));
 
-    dim3 threads(N);
-    dim3 blocks(n/N);
+    dim3 threads(N, N);
+    dim3 blocks(n/BLOCK_SIZE);
 
     // load all results
-    reduceRows<<<blocks, threads>>>(results, avg_stud, X, Y);
-    reduceCols<<<blocks, threads>>>(results, avg_que, X, Y);
+    reduce<<<blocks, threads>>>(results, avg_stud, avg_que, X, Y);
 
     // divide results
     divide<<<Y/N, N>>>(avg_stud, X);

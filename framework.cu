@@ -2,15 +2,17 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include <algorithm>
+// profiler:
+#include <cuda_profiler_api.h>
 
 #include "kernel.cu"
 #include "kernel_CPU.C"
 
-#define STUDENTS  2048
-#define QUESTIONS 1024
+// #define STUDENTS  2048
+// #define QUESTIONS 1024
 // #define ITERS 1000
-// #define STUDENTS  64  // Y
-// #define QUESTIONS 32  // X
+#define STUDENTS  64
+#define QUESTIONS 32
 #define ITERS 1
 
 void generateRandomResults(int *results, int students, int questions) {
@@ -96,8 +98,12 @@ int main(int argc, char **argv){
     printf("Solving on GPU...\n");
     cudaEventRecord(start, 0);
     // iterate to improve measurement precision
+    // PROFILER
+    cudaProfilerStart();
     for (int i = 0; i < ITERS; i++)
         solveGPU(d_results, d_avg_stud, d_avg_que, STUDENTS, QUESTIONS);
+    cudaProfilerStop();
+    // PROFILER END
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
