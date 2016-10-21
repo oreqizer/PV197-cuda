@@ -26,14 +26,18 @@ void reduce(const int *in, float *out_stud, float *out_que, int X, int Y) {
     tile[threadIdx.x][threadIdx.y] = val;
     __syncthreads();
 
-    int sum_stud = val;
-    int sum_que = tile[threadIdx.y][threadIdx.x];
+    register int sum_stud = val;
+    register int sum_que = tile[threadIdx.y][threadIdx.x];
 
     sum_stud = warpSum(sum_stud);
     sum_que = warpSum(sum_que);
 
-    if (threadIdx.x == 0) atomicAdd(out_stud + idx / X, sum_stud);
-    if (threadIdx.x == 0) atomicAdd(out_que + (idx & X - 1), sum_que);  // TODO
+    if (threadIdx.x == 0) {
+        int stud_i = idx / X;
+        int que_i = y + (idx & X - 1);
+        atomicAdd(out_stud + stud_i, sum_stud);
+        atomicAdd(out_que + que_i, sum_que);
+    }
 }
 
 __global__
