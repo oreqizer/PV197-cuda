@@ -29,11 +29,11 @@ void reduce(const int *in, float *out_stud, float *out_que, int X, int Y) {
     int sum_stud = val;
     int sum_que = tile[threadIdx.y][threadIdx.x];
 
-    if (threadIdx.y == 0) sum_stud = warpSum(sum_stud);
-    if (threadIdx.x == 0) sum_que = warpSum(sum_que);
+    sum_stud = warpSum(sum_stud);
+    sum_que = warpSum(sum_que);
 
     if (threadIdx.x == 0) atomicAdd(out_stud + idx / X, sum_stud);
-    if (threadIdx.y == 0) atomicAdd(out_que + idx % X, sum_que);
+    if (threadIdx.x == 0) atomicAdd(out_que + (idx & X - 1), sum_que);  // TODO
 }
 
 __global__
@@ -61,7 +61,7 @@ void solveGPU(
     // load all results
     reduce<<<blocks, threads>>>(results, avg_stud, avg_que, X, Y);
 
-    // divide results
+    // divide results - TODO merge to 'reduce'
     divide<<<Y/N, N>>>(avg_stud, X);
     divide<<<X/N, N>>>(avg_que, Y);
 
