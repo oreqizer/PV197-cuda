@@ -1,9 +1,8 @@
 #include <stdio.h>
 
 #define N           32               // block columns, tile side
-#define PARTS       4                // block partitioning
-#define BLOCK_ROWS2 (N / 2)      // block rows, block 'y' side
-#define BLOCK_ROWS4 (N / 4)      // block rows, block 'y' side
+#define BLOCK_ROWS2 (N / 2)          // block rows, block 'y' side
+#define BLOCK_ROWS4 (N / 4)          // block rows, block 'y' side
 #define BLOCKS      (N * N)          // total blocks
 
 __inline__ __device__
@@ -164,7 +163,7 @@ void solveGPU(
         reduce4<<<blocks, threads>>>(results, avg_stud, avg_que);
     }
 
-    // divide results - TODO merge to 'reduce'
+    // divide results
     divide<<<Y/N, N>>>(avg_stud, X);
     divide<<<X/N, N>>>(avg_que, Y);
 
