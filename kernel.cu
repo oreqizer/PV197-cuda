@@ -24,7 +24,8 @@ int warpSum(int val) {
 __global__
 void reduce(const int *in, float *out_stud, float *out_que) {
     __shared__ int tile[N][N + 1];      // bank conflict
-    int x = blockIdx.x*N + threadIdx.x;
+    int blockX = blockIdx.x*N;
+    int x = blockX + threadIdx.x;
     int y = blockIdx.y*N + threadIdx.y;
     int width = gridDim.x*N;            // width of the whole matrix
 
@@ -41,7 +42,7 @@ void reduce(const int *in, float *out_stud, float *out_que) {
     sum_que1 = warpSum(sum_que1);
 
     if (threadIdx.x == 0) {
-        int que_i = blockIdx.x*N + threadIdx.y;
+        int que_i = blockX + threadIdx.y;
         atomicAdd(out_stud + y, sum_stud1);
         atomicAdd(out_que + que_i, sum_que1);
     }
@@ -50,7 +51,8 @@ void reduce(const int *in, float *out_stud, float *out_que) {
 __global__
 void reduce2(const int *in, float *out_stud, float *out_que) {
     __shared__ int tile[N][N + 1];      // bank conflict
-    int x = blockIdx.x*N + threadIdx.x;
+    int blockX = blockIdx.x*N;
+    int x = blockX + threadIdx.x;
     int y = blockIdx.y*N + threadIdx.y;
     int width = gridDim.x*N;            // width of the whole matrix
 
@@ -73,7 +75,7 @@ void reduce2(const int *in, float *out_stud, float *out_que) {
     sum_que2 = warpSum(sum_que2);
 
     if (threadIdx.x == 0) {
-        int que_i = blockIdx.x*N + threadIdx.y;
+        int que_i = blockX + threadIdx.y;
         atomicAdd(out_stud + y, sum_stud1);
         atomicAdd(out_stud + y + BLOCK_ROWS2, sum_stud2);
         atomicAdd(out_que + que_i, sum_que1);
@@ -84,7 +86,8 @@ void reduce2(const int *in, float *out_stud, float *out_que) {
 __global__
 void reduce4(const int *in, float *out_stud, float *out_que) {
     __shared__ int tile[N][N + 1];      // bank conflict
-    int x = blockIdx.x*N + threadIdx.x;
+    int blockX = blockIdx.x*N;
+    int x = blockX + threadIdx.x;
     int y = blockIdx.y*N + threadIdx.y;
     int width = gridDim.x*N;            // width of the whole matrix
 
@@ -119,7 +122,7 @@ void reduce4(const int *in, float *out_stud, float *out_que) {
     sum_que4 = warpSum(sum_que4);
 
     if (threadIdx.x == 0) {
-        int que_i = blockIdx.x*N + threadIdx.y;
+        int que_i = blockX + threadIdx.y;
         atomicAdd(out_stud + y, sum_stud1);
         atomicAdd(out_stud + y + BLOCK_ROWS4, sum_stud2);
         atomicAdd(out_stud + y + BLOCK_ROWS4*2, sum_stud3);
