@@ -1,6 +1,5 @@
 /*
 TODO:
-- reduce 'y' block size by 2 or 4
 - switch reading to 'int2' or 'int4'
 */
 #include <stdio.h>
