@@ -6,7 +6,7 @@ TODO:
 #include <stdio.h>
 
 #define N          32               // block columns, tile side
-#define PARTS      1                // block partitioning
+#define PARTS      4                // block partitioning
 #define BLOCK_ROWS (N / PARTS)      // block rows, block 'y' side
 #define BLOCKS     (N * N)          // total blocks
 
@@ -22,7 +22,7 @@ int warpSum(int val) {
 }
 
 __global__
-void reduce(const int *in, float *out_stud, float *out_que, int X, int Ystep) {
+void reduce(const int *in, float *out_stud, float *out_que) {
     __shared__ int tile[N][N + 1];      // bank conflict
     int x = blockIdx.x*N + threadIdx.x;
     int y = blockIdx.y*N + threadIdx.y;
@@ -43,15 +43,14 @@ void reduce(const int *in, float *out_stud, float *out_que, int X, int Ystep) {
     sum_que1 = warpSum(sum_que1);
 
     if (threadIdx.x == 0) {
-        int stud_i = idx1 / X;
-        int que_i = y + (idx1 & X - 1);
-        atomicAdd(out_stud + stud_i, sum_stud1);
+        int que_i = blockIdx.x*N + threadIdx.y;
+        atomicAdd(out_stud + y, sum_stud1);
         atomicAdd(out_que + que_i, sum_que1);
     }
 }
 
 __global__
-void reduce2(const int *in, float *out_stud, float *out_que, int X, int Ystep) {
+void reduce2(const int *in, float *out_stud, float *out_que) {
     __shared__ int tile[N][N + 1];      // bank conflict
     int x = blockIdx.x*N + threadIdx.x;
     int y = blockIdx.y*N + threadIdx.y;
@@ -79,17 +78,16 @@ void reduce2(const int *in, float *out_stud, float *out_que, int X, int Ystep) {
     sum_que2 = warpSum(sum_que2);
 
     if (threadIdx.x == 0) {
-        int stud_i = idx1 / X;
-        int que_i = y + (idx1 & X - 1);
-        atomicAdd(out_stud + stud_i, sum_stud1);
-        atomicAdd(out_stud + stud_i + Ystep, sum_stud2);
+        int que_i = blockIdx.x*N + threadIdx.y;
+        atomicAdd(out_stud + y, sum_stud1);
+        atomicAdd(out_stud + y + BLOCK_ROWS, sum_stud2);
         atomicAdd(out_que + que_i, sum_que1);
         atomicAdd(out_que + que_i + BLOCK_ROWS, sum_que2);
     }
 }
 
 __global__
-void reduce4(const int *in, float *out_stud, float *out_que, int X, int Ystep) {
+void reduce4(const int *in, float *out_stud, float *out_que) {
     __shared__ int tile[N][N + 1];      // bank conflict
     int x = blockIdx.x*N + threadIdx.x;
     int y = blockIdx.y*N + threadIdx.y;
@@ -131,12 +129,11 @@ void reduce4(const int *in, float *out_stud, float *out_que, int X, int Ystep) {
     sum_que4 = warpSum(sum_que4);
 
     if (threadIdx.x == 0) {
-        int stud_i = idx1 / X;
-        int que_i = y + (idx1 & X - 1);
-        atomicAdd(out_stud + stud_i, sum_stud1);
-        atomicAdd(out_stud + stud_i + Ystep, sum_stud2);
-        atomicAdd(out_stud + stud_i + Ystep*2, sum_stud3);
-        atomicAdd(out_stud + stud_i + Ystep*3, sum_stud4);
+        int que_i = blockIdx.x*N + threadIdx.y;
+        atomicAdd(out_stud + y, sum_stud1);
+        atomicAdd(out_stud + y + BLOCK_ROWS, sum_stud2);
+        atomicAdd(out_stud + y + BLOCK_ROWS*2, sum_stud3);
+        atomicAdd(out_stud + y + BLOCK_ROWS*3, sum_stud4);
         atomicAdd(out_que + que_i, sum_que1);
         atomicAdd(out_que + que_i + BLOCK_ROWS, sum_que2);
         atomicAdd(out_que + que_i + BLOCK_ROWS*2, sum_que3);
@@ -157,23 +154,23 @@ void solveGPU(
     const int Y,         // students: always divisible by 32
     const int X          // questions: always divisible by 32
 ) {
-    int n = X * Y;
-    int parts = PARTS;
+    // int n = X * Y;
+    int parts = PARTS;   // TODO dynamic
 
     // reset arrays
     cudaMemset(avg_stud, 0, Y*sizeof(avg_stud[0]));
     cudaMemset(avg_que, 0, X*sizeof(avg_que[0]));
 
     dim3 threads(N, BLOCK_ROWS);
-    dim3 blocks(n/BLOCKS);
+    dim3 blocks(X/N, Y/N);
 
     // load all results
-    if (parts == 1) {
-        reduce<<<blocks, threads>>>(results, avg_stud, avg_que, X, Y/parts);
-    } else if (parts == 2) {
-        reduce2<<<blocks, threads>>>(results, avg_stud, avg_que, X, Y/parts);
-    } else if (parts == 4) {
-        reduce4<<<blocks, threads>>>(results, avg_stud, avg_que, X, Y/parts);
+    if (parts <= 1) {
+        reduce<<<blocks, threads>>>(results, avg_stud, avg_que);
+    } else if (parts <= 2) {
+        reduce2<<<blocks, threads>>>(results, avg_stud, avg_que);
+    } else {
+        reduce4<<<blocks, threads>>>(results, avg_stud, avg_que);
     }
 
     // divide results - TODO merge to 'reduce'
