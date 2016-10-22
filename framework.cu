@@ -11,9 +11,6 @@
 #define STUDENTS  2048
 #define QUESTIONS 1024
 #define ITERS 1000
-// #define STUDENTS  64
-// #define QUESTIONS 96
-// #define ITERS 1
 
 void generateRandomResults(int *results, int students, int questions) {
     int hardness[questions];

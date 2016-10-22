@@ -4,10 +4,11 @@ TODO:
 */
 #include <stdio.h>
 
-#define N          32               // block columns, tile side
-#define PARTS      4                // block partitioning
-#define BLOCK_ROWS (N / PARTS)      // block rows, block 'y' side
-#define BLOCKS     (N * N)          // total blocks
+#define N           32               // block columns, tile side
+#define PARTS       4                // block partitioning
+#define BLOCK_ROWS2 (N / 2)      // block rows, block 'y' side
+#define BLOCK_ROWS4 (N / 4)      // block rows, block 'y' side
+#define BLOCKS      (N * N)          // total blocks
 
 __inline__ __device__
 int warpSum(int val) {
@@ -27,10 +28,8 @@ void reduce(const int *in, float *out_stud, float *out_que) {
     int y = blockIdx.y*N + threadIdx.y;
     int width = gridDim.x*N;            // width of the whole matrix
 
-    // global indexes
-    int idx1 = y*width + x;
-
-    int val1 = in[idx1];
+    // values
+    int val1 = in[y*width + x];
 
     tile[threadIdx.x][threadIdx.y] = val1;
     __syncthreads();
@@ -55,21 +54,18 @@ void reduce2(const int *in, float *out_stud, float *out_que) {
     int y = blockIdx.y*N + threadIdx.y;
     int width = gridDim.x*N;            // width of the whole matrix
 
-    // global indexes
-    int idx1 = y*width + x;
-    int idx2 = (y + BLOCK_ROWS)*width + x;
-
-    int val1 = in[idx1];
-    int val2 = in[idx2];
+    // values
+    int val1 = in[y*width + x];
+    int val2 = in[(y + BLOCK_ROWS2)*width + x];
 
     tile[threadIdx.x][threadIdx.y] = val1;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS] = val2;
+    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS2] = val2;
     __syncthreads();
 
     register int sum_stud1 = val1;
     register int sum_stud2 = val2;
     register int sum_que1 = tile[threadIdx.y][threadIdx.x];
-    register int sum_que2 = tile[threadIdx.y + BLOCK_ROWS][threadIdx.x];
+    register int sum_que2 = tile[threadIdx.y + BLOCK_ROWS2][threadIdx.x];
 
     sum_stud1 = warpSum(sum_stud1);
     sum_stud2 = warpSum(sum_stud2);
@@ -79,9 +75,9 @@ void reduce2(const int *in, float *out_stud, float *out_que) {
     if (threadIdx.x == 0) {
         int que_i = blockIdx.x*N + threadIdx.y;
         atomicAdd(out_stud + y, sum_stud1);
-        atomicAdd(out_stud + y + BLOCK_ROWS, sum_stud2);
+        atomicAdd(out_stud + y + BLOCK_ROWS2, sum_stud2);
         atomicAdd(out_que + que_i, sum_que1);
-        atomicAdd(out_que + que_i + BLOCK_ROWS, sum_que2);
+        atomicAdd(out_que + que_i + BLOCK_ROWS2, sum_que2);
     }
 }
 
@@ -92,21 +88,16 @@ void reduce4(const int *in, float *out_stud, float *out_que) {
     int y = blockIdx.y*N + threadIdx.y;
     int width = gridDim.x*N;            // width of the whole matrix
 
-    // global indexes
-    int idx1 = y*width + x;
-    int idx2 = (y + BLOCK_ROWS)*width + x;
-    int idx3 = (y + BLOCK_ROWS*2)*width + x;
-    int idx4 = (y + BLOCK_ROWS*3)*width + x;
-
-    int val1 = in[idx1];
-    int val2 = in[idx2];
-    int val3 = in[idx3];
-    int val4 = in[idx4];
+    // values
+    int val1 = in[y*width + x];
+    int val2 = in[(y + BLOCK_ROWS4)*width + x];
+    int val3 = in[(y + BLOCK_ROWS4*2)*width + x];
+    int val4 = in[(y + BLOCK_ROWS4*3)*width + x];
 
     tile[threadIdx.x][threadIdx.y] = val1;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS] = val2;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS*2] = val3;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS*3] = val4;
+    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4] = val2;
+    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4*2] = val3;
+    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4*3] = val4;
     __syncthreads();
 
     register int sum_stud1 = val1;
@@ -114,9 +105,9 @@ void reduce4(const int *in, float *out_stud, float *out_que) {
     register int sum_stud3 = val3;
     register int sum_stud4 = val4;
     register int sum_que1 = tile[threadIdx.y][threadIdx.x];
-    register int sum_que2 = tile[threadIdx.y + BLOCK_ROWS][threadIdx.x];
-    register int sum_que3 = tile[threadIdx.y + BLOCK_ROWS*2][threadIdx.x];
-    register int sum_que4 = tile[threadIdx.y + BLOCK_ROWS*3][threadIdx.x];
+    register int sum_que2 = tile[threadIdx.y + BLOCK_ROWS4][threadIdx.x];
+    register int sum_que3 = tile[threadIdx.y + BLOCK_ROWS4*2][threadIdx.x];
+    register int sum_que4 = tile[threadIdx.y + BLOCK_ROWS4*3][threadIdx.x];
 
     sum_stud1 = warpSum(sum_stud1);
     sum_stud2 = warpSum(sum_stud2);
@@ -130,13 +121,13 @@ void reduce4(const int *in, float *out_stud, float *out_que) {
     if (threadIdx.x == 0) {
         int que_i = blockIdx.x*N + threadIdx.y;
         atomicAdd(out_stud + y, sum_stud1);
-        atomicAdd(out_stud + y + BLOCK_ROWS, sum_stud2);
-        atomicAdd(out_stud + y + BLOCK_ROWS*2, sum_stud3);
-        atomicAdd(out_stud + y + BLOCK_ROWS*3, sum_stud4);
+        atomicAdd(out_stud + y + BLOCK_ROWS4, sum_stud2);
+        atomicAdd(out_stud + y + BLOCK_ROWS4*2, sum_stud3);
+        atomicAdd(out_stud + y + BLOCK_ROWS4*3, sum_stud4);
         atomicAdd(out_que + que_i, sum_que1);
-        atomicAdd(out_que + que_i + BLOCK_ROWS, sum_que2);
-        atomicAdd(out_que + que_i + BLOCK_ROWS*2, sum_que3);
-        atomicAdd(out_que + que_i + BLOCK_ROWS*3, sum_que4);
+        atomicAdd(out_que + que_i + BLOCK_ROWS4, sum_que2);
+        atomicAdd(out_que + que_i + BLOCK_ROWS4*2, sum_que3);
+        atomicAdd(out_que + que_i + BLOCK_ROWS4*3, sum_que4);
     }
 }
 
@@ -153,22 +144,24 @@ void solveGPU(
     const int Y,         // students: always divisible by 32
     const int X          // questions: always divisible by 32
 ) {
-    // int n = X * Y;
-    int parts = PARTS;   // TODO dynamic
+    int n = X * Y;
+    int parts = n / (N*N);
 
     // reset arrays
     cudaMemset(avg_stud, 0, Y*sizeof(avg_stud[0]));
     cudaMemset(avg_que, 0, X*sizeof(avg_que[0]));
 
-    dim3 threads(N, BLOCK_ROWS);
     dim3 blocks(X/N, Y/N);
 
     // load all results
-    if (parts <= 1) {
+    if (parts <= 4) {
+        dim3 threads(N, N);
         reduce<<<blocks, threads>>>(results, avg_stud, avg_que);
-    } else if (parts <= 2) {
+    } else if (parts <= 8) {
+        dim3 threads(N, BLOCK_ROWS2);
         reduce2<<<blocks, threads>>>(results, avg_stud, avg_que);
     } else {
+        dim3 threads(N, BLOCK_ROWS4);
         reduce4<<<blocks, threads>>>(results, avg_stud, avg_que);
     }
 
