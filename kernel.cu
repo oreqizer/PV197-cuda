@@ -145,7 +145,7 @@ void solveGPU(
     const int X          // questions: always divisible by 32
 ) {
     int n = X * Y;
-    int parts = n / (N*N);
+    int parts = n/BLOCKS;
 
     // reset arrays
     cudaMemset(avg_stud, 0, Y*sizeof(avg_stud[0]));
