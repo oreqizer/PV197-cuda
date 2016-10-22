@@ -1,7 +1,3 @@
-/*
-TODO:
-- switch reading to 'int2' or 'int4'
-*/
 #include <stdio.h>
 
 #define N           32               // block columns, tile side
