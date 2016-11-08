@@ -27,11 +27,11 @@ void reduce(const int *in, float *out_stud, float *out_que) {
     // values
     int val1 = in[y*width + x];
 
-    tile[threadIdx.x][threadIdx.y] = val1;
+    tile[threadIdx.y][threadIdx.x] = val1;
     __syncthreads();
 
     register int sum_stud1 = val1;
-    register int sum_que1 = tile[threadIdx.y][threadIdx.x];
+    register int sum_que1 = tile[threadIdx.x][threadIdx.y];
 
     sum_stud1 = warpSum(sum_stud1);
     sum_que1 = warpSum(sum_que1);
@@ -44,90 +44,10 @@ void reduce(const int *in, float *out_stud, float *out_que) {
 }
 
 __global__
-void reduce2(const int *in, float *out_stud, float *out_que) {
-    __shared__ int tile[N][N + 1];      // bank conflict
-    int blockX = blockIdx.x*N;
-    int x = blockX + threadIdx.x;
-    int y = blockIdx.y*N + threadIdx.y;
-    int width = gridDim.x*N;            // width of the whole matrix
-
-    // values
-    int val1 = in[y*width + x];
-    int val2 = in[(y + BLOCK_ROWS2)*width + x];
-
-    tile[threadIdx.x][threadIdx.y] = val1;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS2] = val2;
-    __syncthreads();
-
-    register int sum_stud1 = val1;
-    register int sum_stud2 = val2;
-    register int sum_que1 = tile[threadIdx.y][threadIdx.x];
-    register int sum_que2 = tile[threadIdx.y + BLOCK_ROWS2][threadIdx.x];
-
-    sum_stud1 = warpSum(sum_stud1);
-    sum_stud2 = warpSum(sum_stud2);
-    sum_que1 = warpSum(sum_que1);
-    sum_que2 = warpSum(sum_que2);
-
-    if (threadIdx.x == 0) {
-        int que_i = blockX + threadIdx.y;
-        atomicAdd(out_stud + y, sum_stud1);
-        atomicAdd(out_stud + y + BLOCK_ROWS2, sum_stud2);
-        atomicAdd(out_que + que_i, sum_que1);
-        atomicAdd(out_que + que_i + BLOCK_ROWS2, sum_que2);
-    }
-}
+void reduce2(const int *in, float *out_stud, float *out_que);
 
 __global__
-void reduce4(const int *in, float *out_stud, float *out_que) {
-    __shared__ int tile[N][N + 1];      // bank conflict
-    int blockX = blockIdx.x*N;
-    int x = blockX + threadIdx.x;
-    int y = blockIdx.y*N + threadIdx.y;
-    int width = gridDim.x*N;            // width of the whole matrix
-
-    // values
-    int val1 = in[y*width + x];
-    int val2 = in[(y + BLOCK_ROWS4)*width + x];
-    int val3 = in[(y + BLOCK_ROWS4*2)*width + x];
-    int val4 = in[(y + BLOCK_ROWS4*3)*width + x];
-
-    tile[threadIdx.x][threadIdx.y] = val1;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4] = val2;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4*2] = val3;
-    tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4*3] = val4;
-    __syncthreads();
-
-    register int sum_stud1 = val1;
-    register int sum_stud2 = val2;
-    register int sum_stud3 = val3;
-    register int sum_stud4 = val4;
-    register int sum_que1 = tile[threadIdx.y][threadIdx.x];
-    register int sum_que2 = tile[threadIdx.y + BLOCK_ROWS4][threadIdx.x];
-    register int sum_que3 = tile[threadIdx.y + BLOCK_ROWS4*2][threadIdx.x];
-    register int sum_que4 = tile[threadIdx.y + BLOCK_ROWS4*3][threadIdx.x];
-
-    sum_stud1 = warpSum(sum_stud1);
-    sum_stud2 = warpSum(sum_stud2);
-    sum_stud3 = warpSum(sum_stud3);
-    sum_stud4 = warpSum(sum_stud4);
-    sum_que1 = warpSum(sum_que1);
-    sum_que2 = warpSum(sum_que2);
-    sum_que3 = warpSum(sum_que3);
-    sum_que4 = warpSum(sum_que4);
-
-    if (threadIdx.x == 0) {
-        int que_i = blockX + threadIdx.y;
-        atomicAdd(out_stud + y, sum_stud1);
-        atomicAdd(out_stud + y + BLOCK_ROWS4, sum_stud2);
-        atomicAdd(out_stud + y + BLOCK_ROWS4*2, sum_stud3);
-        atomicAdd(out_stud + y + BLOCK_ROWS4*3, sum_stud4);
-        atomicAdd(out_que + que_i, sum_que1);
-        atomicAdd(out_que + que_i + BLOCK_ROWS4, sum_que2);
-        atomicAdd(out_que + que_i + BLOCK_ROWS4*2, sum_que3);
-        atomicAdd(out_que + que_i + BLOCK_ROWS4*3, sum_que4);
-    }
-}
+void reduce4(const int *in, float *out_stud, float *out_que);
 
 __global__
 void divide(float *arr, float count) {
@@ -169,5 +89,95 @@ void solveGPU(
 
     if (cudaPeekAtLastError() != cudaSuccess) {
         printf("Error: %s\n", cudaGetErrorString(cudaGetLastError()));
+    }
+}
+
+// =============================================================================
+// --- granular reduce ---
+// =============================================================================
+
+__global__
+void reduce2(const int *in, float *out_stud, float *out_que) {
+    __shared__ int tile[N][N + 1];      // bank conflict
+    int blockX = blockIdx.x*N;
+    int x = blockX + threadIdx.x;
+    int y = blockIdx.y*N + threadIdx.y;
+    int width = gridDim.x*N;            // width of the whole matrix
+
+    // values
+    int val1 = in[y*width + x];
+    int val2 = in[(y + BLOCK_ROWS2)*width + x];
+
+    tile[threadIdx.y][threadIdx.x] = val1;
+    tile[threadIdx.y + BLOCK_ROWS2][threadIdx.x] = val2;
+    __syncthreads();
+
+    register int sum_stud1 = val1;
+    register int sum_stud2 = val2;
+    register int sum_que1 = tile[threadIdx.x][threadIdx.y];
+    register int sum_que2 = tile[threadIdx.x][threadIdx.y + BLOCK_ROWS2];
+
+    sum_stud1 = warpSum(sum_stud1);
+    sum_stud2 = warpSum(sum_stud2);
+    sum_que1 = warpSum(sum_que1);
+    sum_que2 = warpSum(sum_que2);
+
+    if (threadIdx.x == 0) {
+        int que_i = blockX + threadIdx.y;
+        atomicAdd(out_stud + y, sum_stud1);
+        atomicAdd(out_stud + y + BLOCK_ROWS2, sum_stud2);
+        atomicAdd(out_que + que_i, sum_que1);
+        atomicAdd(out_que + que_i + BLOCK_ROWS2, sum_que2);
+    }
+}
+
+__global__
+void reduce4(const int *in, float *out_stud, float *out_que) {
+    __shared__ int tile[N][N + 1];      // bank conflict
+    int blockX = blockIdx.x*N;
+    int x = blockX + threadIdx.x;
+    int y = blockIdx.y*N + threadIdx.y;
+    int width = gridDim.x*N;            // width of the whole matrix
+
+    // values
+    int val1 = in[y*width + x];
+    int val2 = in[(y + BLOCK_ROWS4)*width + x];
+    int val3 = in[(y + BLOCK_ROWS4*2)*width + x];
+    int val4 = in[(y + BLOCK_ROWS4*3)*width + x];
+
+    tile[threadIdx.y][threadIdx.x] = val1;
+    tile[threadIdx.y + BLOCK_ROWS4][threadIdx.x] = val2;
+    tile[threadIdx.y + BLOCK_ROWS4*2][threadIdx.x] = val3;
+    tile[threadIdx.y + BLOCK_ROWS4*3][threadIdx.x] = val4;
+    __syncthreads();
+
+    register int sum_stud1 = val1;
+    register int sum_stud2 = val2;
+    register int sum_stud3 = val3;
+    register int sum_stud4 = val4;
+    register int sum_que1 = tile[threadIdx.x][threadIdx.y];
+    register int sum_que2 = tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4];
+    register int sum_que3 = tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4*2];
+    register int sum_que4 = tile[threadIdx.x][threadIdx.y + BLOCK_ROWS4*3];
+
+    sum_stud1 = warpSum(sum_stud1);
+    sum_stud2 = warpSum(sum_stud2);
+    sum_stud3 = warpSum(sum_stud3);
+    sum_stud4 = warpSum(sum_stud4);
+    sum_que1 = warpSum(sum_que1);
+    sum_que2 = warpSum(sum_que2);
+    sum_que3 = warpSum(sum_que3);
+    sum_que4 = warpSum(sum_que4);
+
+    if (threadIdx.x == 0) {
+        int que_i = blockX + threadIdx.y;
+        atomicAdd(out_stud + y, sum_stud1);
+        atomicAdd(out_stud + y + BLOCK_ROWS4, sum_stud2);
+        atomicAdd(out_stud + y + BLOCK_ROWS4*2, sum_stud3);
+        atomicAdd(out_stud + y + BLOCK_ROWS4*3, sum_stud4);
+        atomicAdd(out_que + que_i, sum_que1);
+        atomicAdd(out_que + que_i + BLOCK_ROWS4, sum_que2);
+        atomicAdd(out_que + que_i + BLOCK_ROWS4*2, sum_que3);
+        atomicAdd(out_que + que_i + BLOCK_ROWS4*3, sum_que4);
     }
 }
