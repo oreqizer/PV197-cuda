@@ -1,12 +1,10 @@
 #include <stdio.h>
 
-#define N      32       // block rows, tile side
-#define BLOCKS (N * N)  // total blocks
+#define N 32
 
 template<int T>
 __global__ void reduce(const int *in, float *out_stud, float *out_que) {
     __shared__ int tile[T * (T + 1)];
-    __shared__ int stud_res[T*4];  // TODO make it iterate 8 * 128
 
     int x4 = blockIdx.x*(T/4) + threadIdx.x;
     int y  = blockIdx.y* T    + threadIdx.y;
@@ -23,8 +21,8 @@ __global__ void reduce(const int *in, float *out_stud, float *out_que) {
         }
         atomicAdd(out_stud + y, sum);
 
-        int x = blockIdx.x*T + threadIdx.y;
         sum = 0;
+        int x = blockIdx.x*T + threadIdx.y;
         for (int i = 0; i < T; i++) {
             sum += tile[i*T + threadIdx.y];
         }
@@ -52,7 +50,7 @@ void solveGPU(
     cudaMemset(avg_stud, 0, Y*sizeof(avg_stud[0]));
     cudaMemset(avg_que, 0, X*sizeof(avg_que[0]));
 
-    dim3 blocks(X/N, Y/(N*4));
+    dim3 blocks(X/N, Y/N);
     dim3 threads(N/4, N);
     reduce<N><<<blocks, threads>>>(results, avg_stud, avg_que);
 
